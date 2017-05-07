@@ -2,6 +2,8 @@ from scipy.constants import pi
 import configparser as cp
 import vector, math
 
+
+
 def utcJulian(date, to='Julian'):
     '''Provided a date in UTC in form dd/mm/yyyy, convert to days since J2000. Alternatively, given a Julian Day, convert to a date in UTC.
     Please note this is horribly, horribly inaccurate and isn't intended to have any real semblance to reality.'''
@@ -15,17 +17,19 @@ def utcJulian(date, to='Julian'):
     #if to == 'UTC':
 
 class Body():
-    '''Name is a heading in a cfg/ini file'''
+    '''Name is a heading in a cfg/ini file given in path'''
 
-    def __init__(self, name, jules):
-        self.define_orbit(name, jules)
+    def __init__(self, name, jules, path='/configs/bodies.cfg'):
+        self.define(name, jules, path)
         self.E = self.eccentricAnomaly(self.e, self.mean_anomaly)
+        self.jules = jules #the Julian date for this body definition
         pass #shove in the other Body functions once I've defined them
 
-    def define_orbit(self, name, jules): #jules is julian days from J2000
+    def define(self, name, jules, path): #jules is julian days from J2000
         cfg = cp.ConfigParser()
-        cfg.read('configs/bodies.cfg')
+        cfg.read(path)
         self.mass = float(cfg[name]['mass'])
+        self.radius = float(cfg[name]['radius'])
         self.period = float(cfg[name]['period'])
         self.a = float(cfg[name]['semimajor axis'])
         self.e = float(cfg[name]['eccentricity'])
@@ -80,7 +84,7 @@ current mean longitude'''
         self.mean_anomaly = self.M(self.L, self.wbar)
         self.E = self.eccentricAnomaly(self.e, self.mean_anomaly)
 
-    def cartesianPos(self):
+    def cartesianPos(self,units='AU'):
         '''Return the position of the body in X, Y, Z coordinates'''
 
         #let's make it easier to read than having 'self' everywhere
@@ -112,7 +116,26 @@ current mean longitude'''
         x = math.cos(lan)*x0 - math.sin(lan)*y
         y = math.sin(lan)*x0 + math.cos(lan)*y
 
+        if units=='m':
+            x,y,z = 149.597870e9*x, 149.597870e9*y, 149.597870e9*z
         return x, y, z
 
+    def cartesianV(self, units='m'):
+        '''Return the velocity of the body in X, Y, Z coordinates'''
 
-        pass
+        #we could do things the hard and correct way to calculate velocity, but instead we're going to cheat
+        #central difference approximation
+        jules = self.jules
+        self.update(jules-1)
+        pos1 = self.cartesianPos(units)
+
+        self.update(jules+1)
+        pos2 = self.cartesianPos(units)
+
+        deltaPos = vector.sub(pos2, pos1)
+        velocity = [elem/(2*86400) for elem in deltaPos]
+
+        #leave things the way we found them
+        self.update(jules)
+
+        return velocity
